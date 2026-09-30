@@ -5,6 +5,7 @@ import org.example.identityservice.exceptions.BadRequestException;
 import org.example.identityservice.exceptions.NotFoundException;
 import org.example.identityservice.models.constants.RoleName;
 import org.example.identityservice.models.dto.req.LoginReq;
+import org.example.identityservice.models.dto.req.RefreshReq;
 import org.example.identityservice.models.dto.req.RegisterReq;
 import org.example.identityservice.models.dto.res.JwtRes;
 import org.example.identityservice.models.entities.RefreshToken;
@@ -89,6 +90,35 @@ public class AuthServiceImpl implements AuthService {
                 refreshToken,
                 "Bearer",
                 userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList()
+        );
+    }
+
+    @Override
+    public JwtRes refresh(RefreshReq req) {
+        RefreshToken token = refreshTokenRepository.findByToken(req.refreshToken()).orElseThrow(() -> new NotFoundException("Refresh token not found"));
+        if (token.getExpiresAt().isBefore(Instant.now()) || token.isRevoked()) {
+            throw new BadRequestException("Refresh token expired");
+        }
+
+        token.setRevoked(true);
+        refreshTokenRepository.save(token);
+
+        // Refresh Token là 1 chỗi UUID
+        String refreshToken = UUID.randomUUID().toString();
+        RefreshToken tk = new RefreshToken(
+                null,
+                refreshToken,
+                Instant.now().plus(7, ChronoUnit.DAYS),
+                false,
+                token.getUser()
+        );
+        // lưu laại token vào db
+        refreshTokenRepository.save(tk);
+        return new JwtRes(
+                jwtUtils.generateToken(token.getUser()),
+                refreshToken,
+                "Bearer",
+                null
         );
     }
 }
